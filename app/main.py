@@ -27,6 +27,7 @@ async def lifespan(_: FastAPI):
     yield
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
+    await worker.shutdown()
     await github.close()
     await devin.close()
 
@@ -115,11 +116,22 @@ async def dashboard():
             else "—"
         )
         verdict = html.escape(review.verdict or "—")
+        badge_class = (
+            "pass"
+            if review.verdict == "pass"
+            else "bug_found"
+            if review.verdict == "bug_found"
+            else "error"
+            if review.state in {"failed", "timed_out"}
+            else "active"
+        )
+        summary = html.escape((review.summary or "No summary")[:120])
+        bug_count = len(review.bugs)
         rows.append(
             f'<tr><td><a href="{html.escape(review.pr_url)}">PR #{review.pr_number}: '
-            f'{html.escape(review.title)}</a></td><td><span class="badge {review.state}">'
+            f'{html.escape(review.title)}</a></td><td><span class="badge {badge_class}">'
             f"{html.escape(review.state)}</span></td><td>{verdict}</td><td>{session}</td>"
-            f"<td>{duration:.1f}m</td></tr>"
+            f"<td>{summary}<br><small>{bug_count} bug(s)</small></td><td>{duration:.1f}m</td></tr>"
         )
     return f"""<!doctype html><html><head><meta http-equiv="refresh" content="15">
 <title>Devin E2E Reviews</title><style>
@@ -133,8 +145,9 @@ box-shadow:0 2px 8px #1720330b}}.card b{{display:block;font-size:25px}}.card spa
 table{{border-collapse:collapse;width:100%}}th,td{{padding:15px 18px;text-align:left;
 border-bottom:1px solid #edf0f4}}th{{font-size:12px;text-transform:uppercase;color:#667085}}
 a{{color:#315efb;text-decoration:none}}.badge{{padding:5px 9px;border-radius:99px;
-font-size:12px;font-weight:600;background:#eef2f7}}.completed{{background:#dcfce7;color:#166534}}
-.running,.session_created,.queued{{background:#dbeafe;color:#1d4ed8}}.failed,.timed_out{{background:#fee2e2;color:#991b1b}}
+font-size:12px;font-weight:600;background:#eef2f7}}.pass{{background:#dcfce7;color:#166534}}
+.bug_found{{background:#fef3c7;color:#92400e}}.error{{background:#fee2e2;color:#991b1b}}
+.active{{background:#dbeafe;color:#1d4ed8}}
 </style></head><body><main><h1>Devin E2E Reviews</h1><div class="sub">Autonomous UI validation for Superset pull requests · refreshes every 15 seconds</div>
-<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Duration</th></tr></thead>
-<tbody>{"".join(rows) or '<tr><td colspan="5">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""
+<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Duration</th></tr></thead>
+<tbody>{"".join(rows) or '<tr><td colspan="6">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""

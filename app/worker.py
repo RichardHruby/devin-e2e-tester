@@ -4,17 +4,18 @@ from datetime import datetime, timezone
 from . import logging
 from .config import Settings
 from .db import Database
-from .devin import DevinClient
+from .devin import DevinClient, parse_verdict
 from .github import GitHubClient
-from .prompt import parse_verdict, render_prompt
+from .prompt import PROMPT_VERSION, render_prompt
 
 
 class ReviewWorker:
     def __init__(self, db: Database, github: GitHubClient, devin: DevinClient, settings: Settings):
         self.db, self.github, self.devin, self.settings = db, github, devin, settings
         self.queue: asyncio.Queue[int] = asyncio.Queue()
-        self.task: asyncio.Task | None = None
         self.lock = asyncio.Lock()
+        self.semaphore = asyncio.Semaphore(settings.max_concurrent_reviews)
+        self.review_tasks: set[asyncio.Task] = set()
 
     async def enqueue(self, review_id: int) -> None:
         await self.queue.put(review_id)
@@ -25,25 +26,26 @@ class ReviewWorker:
             logging.transition(review.id, review.pr_number, "failed", reason="restart")
         while True:
             review_id = await self.queue.get()
-            try:
-                await self.process(review_id)
-            except Exception as exc:
-                review = self.db.get(review_id)
-                self.db.update(review_id, state="failed", summary=str(exc))
-                logging.transition(review_id, review.pr_number, "failed", error=str(exc))
-            finally:
-                self.queue.task_done()
+            task = asyncio.create_task(self._run_review(review_id))
+            self.review_tasks.add(task)
+            task.add_done_callback(self.review_tasks.discard)
+            self.queue.task_done()
+
+    async def _run_review(self, review_id: int) -> None:
+        async with self.semaphore:
+            await self.process(review_id)
+
+    async def shutdown(self) -> None:
+        tasks = list(self.review_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def process(self, review_id: int) -> None:
         review = self.db.get(review_id)
         logging.transition(review.id, review.pr_number, review.state)
         try:
-            pr = {
-                "number": review.pr_number,
-                "head": {"sha": review.head_sha},
-                "html_url": review.pr_url,
-                "title": review.title,
-            }
             await self.github.create_commit_status(
                 self.settings.superset_repo,
                 review.head_sha,
@@ -51,7 +53,9 @@ class ReviewWorker:
                 None,
                 "Devin E2E review is starting",
             )
-            session = await self.devin.create_session(render_prompt(pr))
+            self.db.update(review_id, prompt_version=PROMPT_VERSION)
+            review = self.db.get(review_id)
+            session = await self.devin.create_session(render_prompt(review))
             self.db.update(
                 review_id,
                 state="session_created",

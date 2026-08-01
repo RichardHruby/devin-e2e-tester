@@ -14,8 +14,9 @@ except FileNotFoundError:
 from fastapi.testclient import TestClient
 
 from app.db import Database
+from app.devin import parse_verdict
 from app.main import app
-from app.prompt import parse_verdict
+from app.prompt import render_prompt
 
 
 def payload():
@@ -113,6 +114,27 @@ def test_verdict_parsing():
     )
     assert result and result.verdict == "bug_found"
     assert parse_verdict({"messages": []}) is None
+
+
+def test_persisted_review_renders_complete_prompt(tmp_path):
+    test_db = Database(str(tmp_path / "reviews.db"))
+    review, created = test_db.create(payload()["pull_request"])
+    assert created
+    prompt = render_prompt(review)
+    assert "feature" in prompt
+    assert "RichardHruby/superset" in prompt
+    assert "test it" in prompt
+    assert "SUPERSET_LOAD_EXAMPLES=no" in prompt
+
+
+def test_terminal_review_can_be_re_run(tmp_path):
+    test_db = Database(str(tmp_path / "reviews.db"))
+    first, created = test_db.create(payload()["pull_request"])
+    assert created
+    test_db.update(first.id, state="completed", verdict="pass")
+    second, created = test_db.create(payload()["pull_request"])
+    assert created
+    assert second.id != first.id
 
 
 def test_stats_metrics():

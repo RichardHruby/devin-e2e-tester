@@ -18,6 +18,9 @@ class Review:
     id: int
     pr_number: int
     head_sha: str
+    head_branch: str
+    body: str
+    repo: str
     pr_url: str
     title: str
     state: str
@@ -29,3 +32,4 @@ class Review:
     created_at: str
     updated_at: str
     completed_at: str | None
+    prompt_version: int

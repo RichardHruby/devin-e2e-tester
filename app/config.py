@@ -11,6 +11,7 @@ class Settings:
     review_label: str = os.getenv("REVIEW_LABEL", "devin-e2e-test")
     poll_interval: int = int(os.getenv("POLL_INTERVAL", "60"))
     review_timeout_minutes: int = int(os.getenv("REVIEW_TIMEOUT_MINUTES", "90"))
+    max_concurrent_reviews: int = int(os.getenv("MAX_CONCURRENT_REVIEWS", "3"))
     database_path: str = os.getenv("DATABASE_PATH", "./data/reviews.db")
     github_api_url: str = "https://api.github.com"
     devin_api_url: str = "https://api.devin.ai"

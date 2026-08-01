@@ -23,15 +23,30 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS reviews (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, pr_number INTEGER NOT NULL,
-                head_sha TEXT NOT NULL, pr_url TEXT NOT NULL, title TEXT NOT NULL,
+                head_sha TEXT NOT NULL, head_branch TEXT NOT NULL DEFAULT '',
+                body TEXT NOT NULL DEFAULT '', repo TEXT NOT NULL DEFAULT '',
+                pr_url TEXT NOT NULL, title TEXT NOT NULL,
                 state TEXT NOT NULL, verdict TEXT, summary TEXT, bugs TEXT NOT NULL,
                 session_id TEXT, session_url TEXT, created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL, completed_at TEXT
+                updated_at TEXT NOT NULL, completed_at TEXT,
+                prompt_version INTEGER NOT NULL DEFAULT 1
             )
             """
         )
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(reviews)")}
+        for name, definition in (
+            ("head_branch", "TEXT NOT NULL DEFAULT ''"),
+            ("body", "TEXT NOT NULL DEFAULT ''"),
+            ("repo", "TEXT NOT NULL DEFAULT ''"),
+            ("prompt_version", "INTEGER NOT NULL DEFAULT 1"),
+        ):
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE reviews ADD COLUMN {name} {definition}")
+        self.conn.execute("DROP INDEX IF EXISTS review_pr_sha")
         self.conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS review_pr_sha ON reviews(pr_number, head_sha)"
+            """CREATE UNIQUE INDEX IF NOT EXISTS review_pr_sha_active
+            ON reviews(pr_number, head_sha)
+            WHERE state IN ('queued', 'session_created', 'running')"""
         )
         self.conn.commit()
 
@@ -40,6 +55,9 @@ class Database:
             id=row["id"],
             pr_number=row["pr_number"],
             head_sha=row["head_sha"],
+            head_branch=row["head_branch"],
+            body=row["body"],
+            repo=row["repo"],
             pr_url=row["pr_url"],
             title=row["title"],
             state=row["state"],
@@ -51,6 +69,7 @@ class Database:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             completed_at=row["completed_at"],
+            prompt_version=row["prompt_version"],
         )
 
     def create(self, pr: dict[str, Any]) -> tuple[Review, bool]:
@@ -59,17 +78,21 @@ class Database:
             "SELECT * FROM reviews WHERE pr_number=? AND head_sha=?",
             (pr["number"], head),
         ).fetchone()
-        if existing:
+        if existing and existing["state"] in ACTIVE_STATES:
             return self._review(existing), False
         timestamp = now()
         try:
             cursor = self.conn.execute(
                 """INSERT INTO reviews
-                (pr_number, head_sha, pr_url, title, state, bugs, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'queued', '[]', ?, ?)""",
+                (pr_number, head_sha, head_branch, body, repo, pr_url, title,
+                 state, bugs, created_at, updated_at, prompt_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', '[]', ?, ?, 1)""",
                 (
                     pr["number"],
                     head,
+                    pr["head"].get("ref", ""),
+                    pr.get("body") or "",
+                    pr.get("base", {}).get("repo", {}).get("full_name", ""),
                     pr.get("html_url", ""),
                     pr.get("title", ""),
                     timestamp,
@@ -82,7 +105,7 @@ class Database:
                 "SELECT * FROM reviews WHERE pr_number=? AND head_sha=?",
                 (pr["number"], head),
             ).fetchone()
-            if existing:
+            if existing and existing["state"] in ACTIVE_STATES:
                 return self._review(existing), False
             raise
         return self.get(cursor.lastrowid), True

@@ -1,6 +1,42 @@
+import json
+import re
 from typing import Any
 
 import httpx
+
+from .models import Verdict
+
+
+def parse_verdict(session_json: dict[str, Any]) -> Verdict | None:
+    candidate = session_json.get("structured_output")
+    if isinstance(candidate, dict):
+        data = candidate
+    else:
+        data = None
+        for message in reversed(session_json.get("messages", [])):
+            text = message.get("message", "") if isinstance(message, dict) else str(message)
+            for raw in reversed(re.findall(r"\{[\s\S]*\}", text)):
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict) and parsed.get("verdict") in {
+                    "pass",
+                    "bug_found",
+                    "error",
+                }:
+                    data = parsed
+                    break
+            if data:
+                break
+    if not data or data.get("verdict") not in {"pass", "bug_found", "error"}:
+        return None
+    return Verdict(
+        verdict=data["verdict"],
+        bugs=data.get("bugs", []),
+        summary=str(data.get("summary", "")),
+        fix_pr_url=data.get("fix_pr_url"),
+    )
 
 
 class DevinClient:

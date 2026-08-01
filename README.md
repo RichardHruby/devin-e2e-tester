@@ -41,6 +41,7 @@ service acts only on a `labeled` action where the added label matches
 | `REVIEW_LABEL` | Trigger label | `devin-e2e-test` |
 | `POLL_INTERVAL` | Devin poll seconds | `60` |
 | `REVIEW_TIMEOUT_MINUTES` | Maximum review duration | `90` |
+| `MAX_CONCURRENT_REVIEWS` | Maximum parallel Devin reviews | `3` |
 | `DATABASE_PATH` | SQLite file | `./data/reviews.db` |
 
 ## How would I know this is working?
@@ -51,4 +52,6 @@ monitoring. A successful trigger returns a review ID and `queued`; the worker
 then posts a pending commit status and Devin session comment.
 
 Reviews still active when the process restarts are marked `failed` on startup
-instead of being resumed, avoiding duplicate Devin sessions.
+instead of being resumed, avoiding duplicate Devin sessions. A terminal review
+can be triggered again for the same PR head SHA; only active reviews are
+idempotently blocked.
