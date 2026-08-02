@@ -182,7 +182,8 @@ def test_stats_metrics():
         assert "total_reviews" in client.get("/metrics.json").json()
         dashboard = client.get("/dashboard").text
         assert "Devin E2E Reviews" in dashboard
-        assert "ACU cost reporting is enterprise-only" in dashboard
+        assert 'title="ACU cost reporting is enterprise-only' in dashboard
+        assert 'class="cost-note"' not in dashboard
 
 
 def test_bug_issue_is_filed_once(tmp_path):

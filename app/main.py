@@ -87,18 +87,20 @@ async def metrics():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     stats = db.stats()
-    cost_note = (
-        f'<p class="cost-note">{html.escape(COST_UNAVAILABLE_NOTE)}</p>'
+    cost_info = (
+        f'<span class="info" title="{html.escape(COST_UNAVAILABLE_NOTE)}" '
+        f'aria-label="{html.escape(COST_UNAVAILABLE_NOTE)}">ⓘ</span>'
         if stats["avg_cost_per_review_usd"] is None
         else ""
     )
     cards = "".join(
-        f'<div class="card"><b>{html.escape(str(value))}</b><span>{html.escape(label)}</span></div>'
+        f'<div class="card"><b>{html.escape(str(value))}</b><span>{html.escape(label)}'
+        f"{' ' + cost_info if label == 'Avg cost / review' else ''}</span></div>"
         for label, value in [
             ("Reviews run", stats["total_reviews"]),
             ("Bugs caught (pre-merge)", stats["bugs_caught"]),
             (
-                "Cost / review",
+                "Avg cost / review",
                 f"${stats['avg_cost_per_review_usd']:.2f}"
                 if stats["avg_cost_per_review_usd"] is not None
                 else "n/a",
@@ -157,6 +159,7 @@ h1{{margin:0 0 8px;font-size:30px}}.sub{{color:#667085;margin-bottom:28px}}
 .cards{{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:28px}}.card{{background:white;
 border:1px solid #e6eaf0;border-radius:12px;padding:18px 22px;min-width:145px;
 box-shadow:0 2px 8px #1720330b}}.card b{{display:block;font-size:25px}}.card span{{color:#667085}}
+.info{{color:#667085;cursor:help;font-size:13px}}
 .panel{{background:white;border:1px solid #e6eaf0;border-radius:12px;overflow:hidden}}
 table{{border-collapse:collapse;width:100%}}th,td{{padding:15px 18px;text-align:left;
 border-bottom:1px solid #edf0f4}}th{{font-size:12px;text-transform:uppercase;color:#667085}}
@@ -165,5 +168,5 @@ font-size:12px;font-weight:600;background:#eef2f7}}.pass{{background:#dcfce7;col
 .bug_found{{background:#fef3c7;color:#92400e}}.error{{background:#fee2e2;color:#991b1b}}
 .active{{background:#dbeafe;color:#1d4ed8}}
 </style></head><body><main><h1>Devin E2E Reviews</h1><div class="sub">Autonomous UI validation for Superset pull requests · refreshes every 15 seconds</div>
-<div class="cards">{cards}</div>{cost_note}<div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Cost</th><th>Duration</th></tr></thead>
+<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Cost {cost_info}</th><th>Duration</th></tr></thead>
 <tbody>{"".join(rows) or '<tr><td colspan="7">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""
