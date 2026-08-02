@@ -12,6 +12,11 @@ from .devin import DevinClient
 from .github import GitHubClient
 from .worker import ReviewWorker
 
+COST_UNAVAILABLE_NOTE = (
+    "ACU cost reporting is enterprise-only; this demo org is self-serve, so the API "
+    "reports no ACUs. Measured from the usage UI: ~$5 per review."
+)
+
 db = Database(settings.database_path)
 github = GitHubClient(settings.github_token, settings.github_api_url)
 devin = DevinClient(
@@ -76,6 +81,11 @@ async def metrics():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     stats = db.stats()
+    cost_note = (
+        f'<p class="cost-note">{html.escape(COST_UNAVAILABLE_NOTE)}</p>'
+        if stats["avg_cost_per_review_usd"] is None
+        else ""
+    )
     cards = "".join(
         f'<div class="card"><b>{html.escape(str(value))}</b><span>{html.escape(label)}</span></div>'
         for label, value in [
@@ -122,7 +132,11 @@ async def dashboard():
             findings += f' · <a href="{html.escape(review.issue_url)}">Issue</a>'
         if review.evidence_url:
             findings += f' · <a href="{html.escape(review.evidence_url)}">Evidence</a>'
-        cost = f"${review.cost_usd:.2f}" if review.cost_usd is not None else "n/a"
+        cost = (
+            f"${review.cost_usd:.2f}"
+            if review.cost_usd is not None
+            else f'<span title="{html.escape(COST_UNAVAILABLE_NOTE)}">n/a</span>'
+        )
         rows.append(
             f'<tr><td><a href="{html.escape(review.pr_url)}">PR #{review.pr_number}: '
             f'{html.escape(review.title)}</a></td><td><span class="badge {badge_class}">'
@@ -145,5 +159,5 @@ font-size:12px;font-weight:600;background:#eef2f7}}.pass{{background:#dcfce7;col
 .bug_found{{background:#fef3c7;color:#92400e}}.error{{background:#fee2e2;color:#991b1b}}
 .active{{background:#dbeafe;color:#1d4ed8}}
 </style></head><body><main><h1>Devin E2E Reviews</h1><div class="sub">Autonomous UI validation for Superset pull requests · refreshes every 15 seconds</div>
-<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Cost</th><th>Duration</th></tr></thead>
+<div class="cards">{cards}</div>{cost_note}<div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Cost</th><th>Duration</th></tr></thead>
 <tbody>{"".join(rows) or '<tr><td colspan="7">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""

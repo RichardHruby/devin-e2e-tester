@@ -130,7 +130,9 @@ def test_stats_metrics():
     assert "pass_rate" not in test_db.stats()
     with TestClient(app) as client:
         assert "total_reviews" in client.get("/metrics.json").json()
-        assert "Devin E2E Reviews" in client.get("/dashboard").text
+        dashboard = client.get("/dashboard").text
+        assert "Devin E2E Reviews" in dashboard
+        assert "ACU cost reporting is enterprise-only" in dashboard
 
 
 def test_bug_issue_is_filed_once(tmp_path):
