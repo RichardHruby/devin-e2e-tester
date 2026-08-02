@@ -29,7 +29,8 @@ class Database:
                 state TEXT NOT NULL, verdict TEXT, summary TEXT, bugs TEXT NOT NULL,
                 session_id TEXT, session_url TEXT, created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL, completed_at TEXT,
-                prompt_version INTEGER NOT NULL DEFAULT 1
+                prompt_version INTEGER NOT NULL DEFAULT 1,
+                issue_url TEXT, evidence_url TEXT, acus_consumed REAL, cost_usd REAL
             )
             """
         )
@@ -39,6 +40,10 @@ class Database:
             ("body", "TEXT NOT NULL DEFAULT ''"),
             ("repo", "TEXT NOT NULL DEFAULT ''"),
             ("prompt_version", "INTEGER NOT NULL DEFAULT 1"),
+            ("issue_url", "TEXT"),
+            ("evidence_url", "TEXT"),
+            ("acus_consumed", "REAL"),
+            ("cost_usd", "REAL"),
         ):
             if name not in columns:
                 self.conn.execute(f"ALTER TABLE reviews ADD COLUMN {name} {definition}")
@@ -70,6 +75,10 @@ class Database:
             updated_at=row["updated_at"],
             completed_at=row["completed_at"],
             prompt_version=row["prompt_version"],
+            issue_url=row["issue_url"],
+            evidence_url=row["evidence_url"],
+            acus_consumed=row["acus_consumed"],
+            cost_usd=row["cost_usd"],
         )
 
     def create(self, pr: dict[str, Any]) -> tuple[Review, bool]:
@@ -149,6 +158,8 @@ class Database:
             durations.append((end - start).total_seconds())
         pass_count = sum(r.verdict == "pass" for r in rows)
         bug_count = sum(r.verdict == "bug_found" for r in rows)
+        costs = [r.cost_usd for r in completed if r.cost_usd is not None]
+        acus = [r.acus_consumed for r in completed if r.acus_consumed is not None]
         return {
             "total_reviews": len(rows),
             "active": sum(r.state in ACTIVE_STATES for r in rows),
@@ -157,4 +168,7 @@ class Database:
             "avg_time_to_verdict_seconds": round(sum(durations) / len(durations), 1)
             if durations
             else 0,
+            "total_acus": round(sum(acus), 3) if acus else None,
+            "avg_cost_per_review_usd": round(sum(costs) / len(costs), 2) if costs else None,
+            "cost_per_bug_usd": round(sum(costs) / bug_count, 2) if costs and bug_count else None,
         }

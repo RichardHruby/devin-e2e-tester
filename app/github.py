@@ -32,11 +32,22 @@ class GitHubClient:
         )
         response.raise_for_status()
 
-    async def create_issue_comment(self, repo: str, number: int, body: str) -> None:
+    async def create_issue_comment(self, repo: str, number: int, body: str) -> str | None:
         response = await self.client.post(
             f"/repos/{repo}/issues/{number}/comments", json={"body": body}
         )
         response.raise_for_status()
+        return response.json().get("html_url")
+
+    async def create_issue(self, repo: str, title: str, body: str, label: str) -> str:
+        payload = {"title": title, "body": body, "labels": [label]}
+        response = await self.client.post(f"/repos/{repo}/issues", json=payload)
+        if response.status_code == 422 and label:
+            response = await self.client.post(
+                f"/repos/{repo}/issues", json={"title": title, "body": body}
+            )
+        response.raise_for_status()
+        return response.json()["html_url"]
 
     async def close(self) -> None:
         await self.client.aclose()
