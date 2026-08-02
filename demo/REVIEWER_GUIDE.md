@@ -201,4 +201,5 @@ reviewer, and reduce the reviewer's work to opening a compare link and pasting a
 body — while still exercising the real trigger (`pull_request_target` →
 workflow → orchestrator → Devin), not a simulated one. The `/simulate` endpoint
 remains available for anyone who wants to re-run a review against an existing PR
-without opening a new one.
+without opening a new one (it requires a bearer token when `SIMULATE_TOKEN` is
+configured).

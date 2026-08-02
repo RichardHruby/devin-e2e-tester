@@ -13,13 +13,14 @@ pull request and its surrounding UI, then report reproducible evidence.
 - Head SHA: `$head_sha`
 
 ## Environment setup
-1. Check out the PR branch from the fork: `git fetch origin $head_branch && git checkout $head_branch`.
-2. Ensure `docker/.env-local` contains exactly these required settings (preserve compatible existing settings):
-   `SUPERSET_LOAD_EXAMPLES=no`
-   `SUPERSET_SECRET_KEY=dev-e2e-secret-key`
-3. Start the backend: `docker compose -f docker-compose-image-tag.yml up -d superset`.
-4. Start the frontend dev server from this branch in `superset-frontend`.
-5. Open the running Superset UI and log in with `admin` / `admin`.
+Tester sessions boot from a snapshot with Node 24.16.0 and frontend
+dependencies preinstalled; the prebuilt backend image is already pulled.
+
+1. Fetch the PR branch from its fork: `git fetch https://github.com/$repo.git $head_branch && git checkout $head_branch`.
+2. Start the backend: `docker compose -f docker-compose-image-tag.yml up -d superset`
+   (port 8088). Log in with `admin` / `admin`.
+3. Start the frontend dev server in `superset-frontend`:
+   `DISABLE_TS_CHECKER=true npm run dev-server` (port 9000).
 
 ## Test-plan compiler
 Derive focused test cases from the PR title, description, and changed UI. Cover
@@ -34,16 +35,48 @@ steps, inputs, expected behavior, actual behavior, and browser console/network
 errors when relevant.
 
 ## Pull request comment
-Post one concise comment on `$pr_url` in the fork. Include:
-1. Tested commit and environment.
-2. Test cases and pass/fail results.
-3. Reproduction steps for every bug, with expected versus actual behavior.
-4. Inline or attached screenshots and the screen-recording reference.
-5. A short risk assessment and recommendation.
+Post one skimmable comment on `$pr_url` using exactly this structure:
+
+## E2E review: <verdict phrase>
+<One-sentence overall conclusion.>
+
+**Commit:** `<tested SHA>`
+
+**Environment:** <one-line environment summary>
+
+**Devin session:** <session link> (recording and full report)
+
+| # | Case | Result |
+|---|---|---|
+| 1 | <test case> | PASS / FAIL |
+
+### Bug N (<severity>) — <title>
+**Expected:** <short statement>
+
+**Actual:** <short statement>
+
+**Root cause:** `<file:line>`
+
+<details><summary>Repro + evidence</summary>
+
+<Step-by-step reproduction and all supporting screenshots, logs, and links.>
+</details>
+
+Use at most one inline screenshot per bug: the single most damning image. Keep all
+other screenshots and the full reproduction inside the collapsed details block.
+Put passing-path screenshots in that block too.
+
+### Recommendation
+<Two or three sentences maximum: say whether this blocks merge and suggest a fix.>
+
+**Not covered:** <one line, or "None.">
+
+Keep the visible comment under 4000 characters and readable in under 30 seconds;
+the collapsed details may contain the complete evidence.
 
 ## Final structured verdict
 Emit only this JSON object after posting the comment:
-`{"verdict":"pass|bug_found|error","bugs":[],"summary":"...","fix_pr_url":null}`
+`{"verdict":"pass|bug_found|error","bugs":[],"summary":"..."}`
 
 Field semantics:
 - `verdict`: `pass` means no bug found; `bug_found` means one or more reproducible
@@ -51,4 +84,3 @@ Field semantics:
 - `bugs`: an array of concise objects or strings containing severity and
   reproduction details; use `[]` for `pass`.
 - `summary`: a concise explanation of coverage and outcome.
-- `fix_pr_url`: the URL of a fix PR if one was created, otherwise `null`.

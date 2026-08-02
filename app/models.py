@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-TERMINAL_STATES = {"completed", "failed", "timed_out"}
 ACTIVE_STATES = {"queued", "session_created", "running"}
 
 
@@ -10,7 +9,6 @@ class Verdict:
     verdict: str
     bugs: list[Any]
     summary: str
-    fix_pr_url: str | None = None
 
 
 @dataclass
