@@ -80,6 +80,10 @@ started"* comment with the session link, the verdict comment with evidence, the
 `devin/e2e-review` commit status, and a new row on the dashboard. A frontend change with a
 description that claims something specific gives Devin the most to work with.
 
+Fastest path: [`demo/REVIEWER_GUIDE.md`](demo/REVIEWER_GUIDE.md) — three branches are already
+pushed to the fork with ready-to-paste titles and bodies, so triggering a review is a compare
+link plus a paste.
+
 The body marker is a permissionless opt-in — GitHub only lets users with triage access add
 labels, so external contributors can't use the label path
 ([decision 2](./DECISIONS.md#2-the-devin-e2e-body-marker-instead-of-a-label)).
