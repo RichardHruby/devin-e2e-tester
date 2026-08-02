@@ -117,6 +117,46 @@ def test_body_marker_triggers_opened_review(monkeypatch):
     assert response.json()["status"] == "queued"
 
 
+def test_simulate_token_is_optional_and_protects_when_configured(monkeypatch):
+    from app import main
+
+    async def enqueue(_: int):
+        return None
+
+    async def get_pr(_: str, number: int):
+        pr = payload()["pull_request"]
+        pr["number"] = number
+        pr["head"]["sha"] = f"simulate-{number}"
+        return pr
+
+    monkeypatch.setattr(main.worker, "enqueue", enqueue)
+    monkeypatch.setattr(main.github, "get_pr", get_pr)
+    monkeypatch.setattr(main.settings, "simulate_token", "")
+    with TestClient(app) as client:
+        response = client.post("/simulate", json={"pr_number": 8})
+        assert response.status_code == 200
+        assert response.json()["status"] == "queued"
+
+    monkeypatch.setattr(main.settings, "simulate_token", "test-token")
+    with TestClient(app) as client:
+        assert client.post("/simulate", json={"pr_number": 9}).status_code == 401
+        assert (
+            client.post(
+                "/simulate",
+                json={"pr_number": 9},
+                headers={"Authorization": "Bearer wrong-token"},
+            ).status_code
+            == 401
+        )
+        response = client.post(
+            "/simulate",
+            json={"pr_number": 9},
+            headers={"Authorization": "Bearer test-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "queued"
+
+
 def test_verdict_parsing():
     assert (
         parse_verdict(
@@ -125,23 +165,16 @@ def test_verdict_parsing():
                     "verdict": "pass",
                     "bugs": [],
                     "summary": "Looks good",
-                    "fix_pr_url": None,
                 }
             }
         ).verdict
         == "pass"
     )
     result = parse_verdict(
-        {
-            "messages": [
-                {
-                    "message": 'done {"verdict":"bug_found","bugs":["x"],'
-                    '"summary":"broken","fix_pr_url":null}'
-                }
-            ]
-        }
+        {"messages": [{"message": 'done {"verdict":"bug_found","bugs":["x"],"summary":"broken"}'}]}
     )
     assert result and result.verdict == "bug_found"
+    assert parse_verdict({"structured_output": {"verdict": "pass", "bugs": "invalid"}}).bugs == []
     assert parse_verdict({"messages": []}) is None
 
 
@@ -153,7 +186,8 @@ def test_persisted_review_renders_complete_prompt(tmp_path):
     assert "feature" in prompt
     assert "RichardHruby/superset" in prompt
     assert "test it" in prompt
-    assert "SUPERSET_LOAD_EXAMPLES=no" in prompt
+    assert "docker compose -f docker-compose-image-tag.yml up -d superset" in prompt
+    assert "DISABLE_TS_CHECKER=true npm run dev-server" in prompt
 
 
 def test_terminal_review_can_be_re_run(tmp_path):
@@ -179,7 +213,7 @@ def test_stats_metrics():
         verdict="pass",
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
-    assert test_db.stats()["pass_rate"] == 1
+    assert "pass_rate" not in test_db.stats()
     with TestClient(app) as client:
         assert "total_reviews" in client.get("/metrics.json").json()
         assert "Devin E2E Reviews" in client.get("/dashboard").text

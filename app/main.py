@@ -4,7 +4,7 @@ import logging as std_logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -79,8 +79,12 @@ class SimulateRequest(BaseModel):
 
 
 @app.post("/simulate")
-async def simulate(request: SimulateRequest):
-    pr = await github.get_pr(settings.superset_repo, request.pr_number)
+async def simulate(request: Request, payload: SimulateRequest):
+    if settings.simulate_token:
+        authorization = request.headers.get("authorization")
+        if authorization != f"Bearer {settings.simulate_token}":
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    pr = await github.get_pr(settings.superset_repo, payload.pr_number)
     return await trigger_review(pr)
 
 

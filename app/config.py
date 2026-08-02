@@ -10,6 +10,7 @@ class Settings:
     acu_cost_usd: float = float(os.getenv("ACU_COST_USD", "2.25"))
     github_token: str = os.getenv("GITHUB_TOKEN", "")
     github_webhook_secret: str = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+    simulate_token: str = os.getenv("SIMULATE_TOKEN", "")
     superset_repo: str = os.getenv("SUPERSET_REPO", "RichardHruby/superset")
     review_label: str = os.getenv("REVIEW_LABEL", "devin-e2e-test")
     poll_interval: int = int(os.getenv("POLL_INTERVAL", "60"))
