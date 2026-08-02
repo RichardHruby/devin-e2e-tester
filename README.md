@@ -58,12 +58,13 @@ can't double-spend a session.
 
 ## Proof it works
 
-- [Superset PR #5](https://github.com/RichardHruby/superset/pull/5)
+- [Superset PR #14](https://github.com/RichardHruby/superset/pull/14)
   - The body contains `[devin-e2e]`.
   - The GitHub Action fired.
-  - Devin's [evidence comment](https://github.com/RichardHruby/superset/pull/5#issuecomment-5154876704)
-    records the review.
-  - The orchestrator auto-filed [issue #6](https://github.com/RichardHruby/superset/issues/6).
+  - Devin's [evidence comment](https://github.com/RichardHruby/superset/pull/14#issuecomment-5160016186)
+    records the review, with screenshots of the bug.
+  - The orchestrator auto-filed [issue #18](https://github.com/RichardHruby/superset/issues/18)
+    and set a failing `devin/e2e-review` commit status.
   - Track runs yourself in the [deployed Render app](https://devin-e2e-tester.onrender.com/dashboard).
 
 ## Try it yourself — no credentials needed
