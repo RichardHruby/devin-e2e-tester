@@ -156,14 +156,12 @@ class Database:
             start = datetime.fromisoformat(review.created_at)
             end = datetime.fromisoformat(review.completed_at)
             durations.append((end - start).total_seconds())
-        pass_count = sum(r.verdict == "pass" for r in rows)
         bug_count = sum(r.verdict == "bug_found" for r in rows)
         costs = [r.cost_usd for r in completed if r.cost_usd is not None]
         acus = [r.acus_consumed for r in completed if r.acus_consumed is not None]
         return {
             "total_reviews": len(rows),
             "active": sum(r.state in ACTIVE_STATES for r in rows),
-            "pass_rate": round(pass_count / len(completed), 3) if completed else 0,
             "bugs_caught": bug_count,
             "avg_time_to_verdict_seconds": round(sum(durations) / len(durations), 1)
             if durations

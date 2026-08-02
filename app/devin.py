@@ -15,7 +15,7 @@ def parse_verdict(session_json: dict[str, Any]) -> Verdict | None:
         data = None
         for message in reversed(session_json.get("messages", [])):
             text = message.get("message", "") if isinstance(message, dict) else str(message)
-            for raw in reversed(re.findall(r"\{[\s\S]*\}", text)):
+            for raw in reversed(re.findall(r"\{[\s\S]*?\}", text)):
                 try:
                     parsed = json.loads(raw)
                 except json.JSONDecodeError:
@@ -31,11 +31,13 @@ def parse_verdict(session_json: dict[str, Any]) -> Verdict | None:
                 break
     if not data or data.get("verdict") not in {"pass", "bug_found", "error"}:
         return None
+    bugs = data.get("bugs", [])
+    if not isinstance(bugs, list):
+        bugs = []
     return Verdict(
         verdict=data["verdict"],
-        bugs=data.get("bugs", []),
+        bugs=bugs,
         summary=str(data.get("summary", "")),
-        fix_pr_url=data.get("fix_pr_url"),
     )
 
 
@@ -73,9 +75,8 @@ class DevinClient:
                         "verdict": {"enum": ["pass", "bug_found", "error"]},
                         "bugs": {"type": "array"},
                         "summary": {"type": "string"},
-                        "fix_pr_url": {"type": ["string", "null"]},
                     },
-                    "required": ["verdict", "bugs", "summary", "fix_pr_url"],
+                    "required": ["verdict", "bugs", "summary"],
                 },
             },
         )
