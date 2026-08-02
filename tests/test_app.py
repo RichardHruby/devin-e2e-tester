@@ -110,6 +110,14 @@ def test_dashboard_duration_format():
     assert format_duration(850) == "14:10"
 
 
+def test_root_redirects_to_dashboard():
+    with TestClient(app) as client:
+        response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/dashboard"
+
+
 def test_worker_waits_for_terminal_structured_output(tmp_path, monkeypatch):
     test_db = Database(str(tmp_path / "reviews.db"))
     review, _ = test_db.create(payload())
