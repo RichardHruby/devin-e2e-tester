@@ -17,7 +17,12 @@ from .worker import ReviewWorker
 
 db = Database(settings.database_path)
 github = GitHubClient(settings.github_token, settings.github_api_url)
-devin = DevinClient(settings.devin_api_key, settings.devin_api_url)
+devin = DevinClient(
+    settings.devin_api_key,
+    settings.devin_api_url,
+    settings.devin_org_api_key,
+    settings.devin_org_id,
+)
 worker = ReviewWorker(db, github, devin, settings)
 
 
@@ -60,10 +65,14 @@ async def github_webhook(request: Request):
     else:
         std_logging.getLogger("orchestrator").warning("GITHUB_WEBHOOK_SECRET is unset")
     payload = json.loads(body)
-    if (
-        payload.get("action") != "labeled"
-        or payload.get("label", {}).get("name") != settings.review_label
-    ):
+    labeled = (
+        payload.get("action") == "labeled"
+        and payload.get("label", {}).get("name") == settings.review_label
+    )
+    marked_open = payload.get("action") in {"opened", "reopened"} and (
+        settings.review_body_marker in (payload.get("pull_request", {}).get("body") or "")
+    )
+    if not labeled and not marked_open:
         return {"status": "ignored"}
     return await trigger_review(payload["pull_request"])
 
@@ -94,11 +103,16 @@ async def dashboard():
     cards = "".join(
         f'<div class="card"><b>{html.escape(str(value))}</b><span>{html.escape(label)}</span></div>'
         for label, value in [
-            ("Total reviews", stats["total_reviews"]),
-            ("Active", stats["active"]),
-            ("Pass rate", f"{stats['pass_rate'] * 100:.0f}%"),
-            ("Bugs caught", stats["bugs_caught"]),
+            ("Reviews run", stats["total_reviews"]),
+            ("Bugs caught (pre-merge)", stats["bugs_caught"]),
+            (
+                "Cost / review",
+                f"${stats['avg_cost_per_review_usd']:.2f}"
+                if stats["avg_cost_per_review_usd"] is not None
+                else "n/a",
+            ),
             ("Avg time to verdict", f"{stats['avg_time_to_verdict_seconds'] / 60:.1f}m"),
+            ("Active", stats["active"]),
         ]
     )
     rows = []
@@ -127,11 +141,17 @@ async def dashboard():
         )
         summary = html.escape((review.summary or "No summary")[:120])
         bug_count = len(review.bugs)
+        findings = summary + f"<br><small>{bug_count} bug(s)</small>"
+        if review.issue_url:
+            findings += f' · <a href="{html.escape(review.issue_url)}">Issue</a>'
+        if review.evidence_url:
+            findings += f' · <a href="{html.escape(review.evidence_url)}">Evidence</a>'
+        cost = f"${review.cost_usd:.2f}" if review.cost_usd is not None else "n/a"
         rows.append(
             f'<tr><td><a href="{html.escape(review.pr_url)}">PR #{review.pr_number}: '
             f'{html.escape(review.title)}</a></td><td><span class="badge {badge_class}">'
             f"{html.escape(review.state)}</span></td><td>{verdict}</td><td>{session}</td>"
-            f"<td>{summary}<br><small>{bug_count} bug(s)</small></td><td>{duration:.1f}m</td></tr>"
+            f"<td>{findings}</td><td>{cost}</td><td>{duration:.1f}m</td></tr>"
         )
     return f"""<!doctype html><html><head><meta http-equiv="refresh" content="15">
 <title>Devin E2E Reviews</title><style>
@@ -149,5 +169,5 @@ font-size:12px;font-weight:600;background:#eef2f7}}.pass{{background:#dcfce7;col
 .bug_found{{background:#fef3c7;color:#92400e}}.error{{background:#fee2e2;color:#991b1b}}
 .active{{background:#dbeafe;color:#1d4ed8}}
 </style></head><body><main><h1>Devin E2E Reviews</h1><div class="sub">Autonomous UI validation for Superset pull requests · refreshes every 15 seconds</div>
-<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Duration</th></tr></thead>
-<tbody>{"".join(rows) or '<tr><td colspan="6">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""
+<div class="cards">{cards}</div><div class="panel"><table><thead><tr><th>Pull request</th><th>State</th><th>Verdict</th><th>Devin session</th><th>Findings</th><th>Cost</th><th>Duration</th></tr></thead>
+<tbody>{"".join(rows) or '<tr><td colspan="7">No reviews yet.</td></tr>'}</tbody></table></div></main></body></html>"""

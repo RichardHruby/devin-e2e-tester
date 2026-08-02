@@ -42,6 +42,72 @@ class ReviewWorker:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    @staticmethod
+    def _issue_body(review) -> str:
+        bugs = []
+        for index, bug in enumerate(review.bugs, 1):
+            if isinstance(bug, dict):
+                details = "\n".join(
+                    f"**{key.replace('_', ' ').title()}:** {bug.get(key, 'n/a')}"
+                    for key in (
+                        "title",
+                        "severity",
+                        "location",
+                        "repro",
+                        "expected",
+                        "actual",
+                        "suggested_fix",
+                    )
+                )
+            else:
+                details = str(bug)
+            bugs.append(f"### Bug {index}\n{details}")
+        return (
+            f"Automated E2E review found bugs in [PR #{review.pr_number}]({review.pr_url}).\n\n"
+            f"**Devin session:** {review.session_url}\n\n"
+            + "\n\n".join(bugs)
+        )
+
+    async def _file_bug_issue(self, review) -> tuple[str, str | None]:
+        if review.issue_url:
+            return review.issue_url, review.evidence_url
+        issue_url = await self.github.create_issue(
+            self.settings.superset_repo,
+            f"[devin-e2e] Bug found in PR #{review.pr_number}: {review.title}",
+            self._issue_body(review),
+            self.settings.review_label,
+        )
+        try:
+            evidence_url = await self.github.create_issue_comment(
+                self.settings.superset_repo,
+                review.pr_number,
+                f"Devin E2E found bugs in this PR. Filed issue: {issue_url}\n"
+                f"Session: {review.session_url}",
+            )
+        except Exception:
+            evidence_url = None
+        self.db.update(review.id, issue_url=issue_url, evidence_url=evidence_url)
+        return issue_url, evidence_url
+
+    async def _enrich_cost(self, review) -> None:
+        if not review.session_id:
+            return
+        try:
+            acus = await self.devin.get_session_usage(review.session_id)
+            if acus is not None:
+                self.db.update(
+                    review.id,
+                    acus_consumed=acus,
+                    cost_usd=acus * self.settings.acu_cost_usd,
+                )
+        except Exception as exc:
+            logging.transition(
+                review.id,
+                review.pr_number,
+                review.state,
+                reason=f"ACU lookup unavailable: {exc}",
+            )
+
     async def process(self, review_id: int) -> None:
         review = self.db.get(review_id)
         logging.transition(review.id, review.pr_number, review.state)
@@ -98,6 +164,18 @@ class ReviewWorker:
                         bugs=verdict.bugs,
                         completed_at=datetime.now(timezone.utc).isoformat(),
                     )
+                    review = self.db.get(review_id)
+                    if verdict.verdict == "bug_found":
+                        try:
+                            await self._file_bug_issue(review)
+                        except Exception as exc:
+                            logging.transition(
+                                review_id,
+                                review.pr_number,
+                                review.state,
+                                reason=f"Issue filing unavailable: {exc}",
+                            )
+                    await self._enrich_cost(review)
                     review = self.db.get(review_id)
                     await self.github.create_commit_status(
                         self.settings.superset_repo,
