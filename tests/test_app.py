@@ -31,7 +31,7 @@ def payload():
     }
 
 
-def test_simulate_token_is_optional_and_protects_when_configured(monkeypatch):
+def test_reviews_token_is_optional_and_protects_when_configured(monkeypatch):
     from app import main
 
     async def enqueue(_: int):
@@ -40,30 +40,30 @@ def test_simulate_token_is_optional_and_protects_when_configured(monkeypatch):
     async def get_pr(_: str, number: int):
         pr = payload()
         pr["number"] = number
-        pr["head"]["sha"] = f"simulate-{number}"
+        pr["head"]["sha"] = f"review-{number}"
         return pr
 
     monkeypatch.setattr(main.worker, "enqueue", enqueue)
     monkeypatch.setattr(main.github, "get_pr", get_pr)
-    monkeypatch.setattr(main.settings, "simulate_token", "")
+    monkeypatch.setattr(main.settings, "reviews_token", "")
     with TestClient(app) as client:
-        response = client.post("/simulate", json={"pr_number": 8})
+        response = client.post("/reviews", json={"pr_number": 8})
         assert response.status_code == 200
         assert response.json()["status"] == "queued"
 
-    monkeypatch.setattr(main.settings, "simulate_token", "test-token")
+    monkeypatch.setattr(main.settings, "reviews_token", "test-token")
     with TestClient(app) as client:
-        assert client.post("/simulate", json={"pr_number": 9}).status_code == 401
+        assert client.post("/reviews", json={"pr_number": 9}).status_code == 401
         assert (
             client.post(
-                "/simulate",
+                "/reviews",
                 json={"pr_number": 9},
                 headers={"Authorization": "Bearer wrong-token"},
             ).status_code
             == 401
         )
         response = client.post(
-            "/simulate",
+            "/reviews",
             json={"pr_number": 9},
             headers={"Authorization": "Bearer test-token"},
         )

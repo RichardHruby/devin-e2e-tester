@@ -49,15 +49,15 @@ async def trigger_review(pr: dict) -> dict:
         return {"status": status, "review_id": review.id, "state": review.state}
 
 
-class SimulateRequest(BaseModel):
+class ReviewRequest(BaseModel):
     pr_number: int
 
 
-@app.post("/simulate")
-async def simulate(request: Request, payload: SimulateRequest):
-    if settings.simulate_token:
+@app.post("/reviews")
+async def create_review(request: Request, payload: ReviewRequest):
+    if settings.reviews_token:
         authorization = request.headers.get("authorization")
-        if authorization != f"Bearer {settings.simulate_token}":
+        if authorization != f"Bearer {settings.reviews_token}":
             raise HTTPException(status_code=401, detail="Unauthorized")
     pr = await github.get_pr(settings.superset_repo, payload.pr_number)
     return await trigger_review(pr)
