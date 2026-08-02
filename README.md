@@ -45,6 +45,14 @@ public fork [`RichardHruby/superset`](https://github.com/RichardHruby/superset)
 with `[devin-e2e]` in the body. No repository permissions are needed for this
 trigger path.
 
+The body marker exists because of GitHub's permission model: only users with
+triage access can add labels, so external contributors cannot use the
+`devin-e2e-test` label to opt in. The marker gives them an equivalent opt-in
+that works from any account. In a production rollout the opt-in disappears
+entirely — the trigger workflow can instead fire on every PR touching
+`superset-frontend/**` via a `paths` filter (see the commented alternative in
+the fork's `.github/workflows/devin-e2e-trigger.yml`).
+
 To run locally, configure your own `DEVIN_API_KEY` and `GITHUB_TOKEN`, set
 `SUPERSET_REPO` to a fork you can access, and expose the local webhook endpoint
 to GitHub. You can also trigger a review manually with `/simulate` using a
