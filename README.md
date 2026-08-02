@@ -19,10 +19,16 @@ flowchart LR
 ```bash
 cp .env.example .env
 # fill DEVIN_API_KEY, GITHUB_TOKEN, and webhook secret
-docker compose up
+docker compose up -d
+curl http://localhost:8000/healthz
 curl -X POST localhost:8000/simulate \
   -H 'content-type: application/json' -d '{"pr_number":1}'
 ```
+
+The first `docker compose up` creates the local `data/` directory and SQLite
+database automatically. The health check should return `{"status":"ok"}` before
+triggering a review. The `/simulate` example requires a valid `GITHUB_TOKEN`
+because it fetches the pull request from GitHub.
 
 Configure a GitHub webhook on the fork/repository with URL
 `https://your-host/webhook/github`, content type `application/json`, the same
