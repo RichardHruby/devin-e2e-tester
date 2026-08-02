@@ -146,7 +146,7 @@ class ReviewWorker:
                     )
                 session_json = await self.devin.get_session(review.session_id)
                 verdict = parse_verdict(session_json)
-                if verdict:
+                if verdict and session_json.get("status_enum") != "working":
                     state = (
                         "completed"
                         if verdict.verdict == "pass"
@@ -190,6 +190,8 @@ class ReviewWorker:
                         verdict=verdict.verdict,
                     )
                     return
+                if verdict:
+                    self.db.update(review_id, state="running", summary=verdict.summary)
                 await asyncio.sleep(POLL_INTERVAL)
             self.db.update(
                 review_id,

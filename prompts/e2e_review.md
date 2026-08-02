@@ -34,6 +34,13 @@ Capture screenshots for each finding and for the key passing path. Record exact
 steps, inputs, expected behavior, actual behavior, and browser console/network
 errors when relevant.
 
+Publish evidence images for logged-out viewers. Commit them to a public orphan
+branch in the fork, such as `devin-evidence/pr-$pr_number-$short_sha`, push it
+to the same fork, and embed
+`https://raw.githubusercontent.com/$repo/<branch>/<file>` URLs in the PR comment.
+Do not embed `app.devin.ai/attachments/...` image URLs. Keep recording links as
+Devin session links.
+
 ## Pull request comment
 Post one skimmable comment on `$pr_url` using exactly this structure:
 
