@@ -6,20 +6,15 @@
 
 ## The problem
 
-QA on pull requests is expensive and error-prone. Writing and maintaining E2E tests costs
-more than most changes are worth, and manual verification means a human clicking through
-the app — so in practice a PR description says *"the modal now preserves the user's active
-status"* and nobody checks. The claim ships unverified. And as more PR code is
-AI-generated, review volume goes up while the author's own confidence in the claims goes
-down — exactly the wrong direction for "trust the description".
+QA on pull requests is expensive and easy to skip. Maintaining E2E tests costs more than
+many changes justify, while manual verification depends on someone clicking through the
+app. A PR can claim *"the modal now preserves the user's active status"* and ship
+unverified. As more PR code is AI-generated, review volume rises while confidence in the
+claims falls.
 
-The fix isn't more test infrastructure — it's that before a human reviews a PR, there
-should already be evidence that *someone* read the description, opened the app, and tried
-the thing. That someone doesn't have to be human. So: **a PR opts in, an autonomous
-session boots the app, tests the claimed behavior in a browser, and posts a verdict with
-screenshots and a recording.** The PR author gets a commit status; the human reviewer
-starts from evidence instead of trust. This demo runs it against Apache Superset, a large
-real-world React frontend.
+The answer is evidence before human review: a session reads the description, opens the
+app, and tests the claimed behavior in a browser. **Devin is perfect for that job.** This
+demo runs that loop against Apache Superset, a large real-world React frontend.
 
 ## The pipeline
 
@@ -63,31 +58,20 @@ can't double-spend a session.
 
 ## Proof it works
 
-[superset#5](https://github.com/RichardHruby/superset/pull/5) was opened with `[devin-e2e]`
-in the body — a frontend change whose description claims editing a user preserves their
-active status, while the code silently flips it. The Action fired, the hosted orchestrator
-created the session, Devin found the bug in the browser (repro steps, screenshots, and a
-recording on the PR), the orchestrator auto-filed
-[issue #6](https://github.com/RichardHruby/superset/issues/6) and set a failing commit
-status. Nothing was clicked in between. The run shows up on the live dashboard:
-[devin-e2e-tester.onrender.com/dashboard](https://devin-e2e-tester.onrender.com/dashboard)
-(`/metrics.json` for the same numbers as JSON).
+- [Superset PR #5](https://github.com/RichardHruby/superset/pull/5)
+  - The body contains `[devin-e2e]`.
+  - The GitHub Action fired.
+  - Devin's [evidence comment](https://github.com/RichardHruby/superset/pull/5#issuecomment-5154876704)
+    records the review.
+  - The orchestrator auto-filed [issue #6](https://github.com/RichardHruby/superset/issues/6).
+  - Track runs yourself in the [deployed Render app](https://devin-e2e-tester.onrender.com/dashboard).
 
 ## Try it yourself — no credentials needed
 
-Open a PR against [`RichardHruby/superset`](https://github.com/RichardHruby/superset) with
-`[devin-e2e]` anywhere in the body. Then watch, in order: the Action run, the *"review
-started"* comment with the session link, the verdict comment with evidence, the
-`devin/e2e-review` commit status, and a new row on the dashboard. A frontend change with a
-description that claims something specific gives Devin the most to work with.
-
-Fastest path: [`demo/REVIEWER_GUIDE.md`](demo/REVIEWER_GUIDE.md) — three branches are already
-pushed to the fork with ready-to-paste titles and bodies, so triggering a review is a compare
-link plus a paste.
-
-The body marker is a permissionless opt-in — GitHub only lets users with triage access add
-labels, so external contributors can't use the label path
-([decision 2](./DECISIONS.md#2-the-devin-e2e-body-marker-instead-of-a-label)).
+1. Open a PR against [`RichardHruby/superset`](https://github.com/RichardHruby/superset)
+   with `[devin-e2e]` in the body.
+2. Use the pre-prepared examples in [`demo/REVIEWER_GUIDE.md`](demo/REVIEWER_GUIDE.md),
+   or ask Devin (or any coding agent) to open one.
 
 ## Running it yourself
 
@@ -106,9 +90,7 @@ curl -X POST localhost:8000/reviews \
 ```
 
 `POST /reviews` is the single entrypoint — the GitHub Action calls the same endpoint. It
-fetches the PR from GitHub, so it needs a valid `GITHUB_TOKEN`. An earlier version also had
-a raw GitHub-webhook receiver with HMAC verification; it was cut because two entry paths
-for one demo is one too many ([decision 1](./DECISIONS.md#1-the-trigger-is-a-github-action-forwarder-not-a-raw-webhook)).
+fetches the PR from GitHub, so it needs a valid `GITHUB_TOKEN`.
 
 ### Tester snapshot
 
@@ -119,8 +101,8 @@ image pulled. A session starts the backend
 checks out the PR branch, and runs the frontend dev server on :9000 with
 `DISABLE_TS_CHECKER=true`. Demo credentials are `admin` / `admin`.
 
-**Caveat:** the backend image is prebuilt, so backend changes in a PR are not exercised —
-only the frontend runs from the PR branch. [Decision 8](./DECISIONS.md#8-a-blueprint-snapshot-not-per-session-setup)
+**Caveat:** the backend image is prebuilt, so only frontend changes run from the PR branch
+— a deliberate demo simplification to cut scope. [Decision 8](./DECISIONS.md#8-a-blueprint-snapshot-not-per-session-setup)
 covers what production would change.
 
 ## Environment
@@ -148,21 +130,15 @@ the metric picks).
 
 ## Where this goes
 
-The demo is deliberately opt-in and frontend-only. The extensions I'd build next, roughly
-in order:
+For every PR, production would create a preview deployment of the branch and a database
+branch seeded with realistic synthetic data. Superset is Postgres, so the database branch
+would let Devin E2E-test every meaningful feature under production-like conditions without
+sharing state between reviews. When Devin finds a defect, it would push fix commits to the
+same branch.
 
-- **Agentic CI, not opt-in**: drop the marker and fire on every PR touching
-  `superset-frontend/**` (the `paths` filter is already written, commented, in the
-  workflow), and let the `devin/e2e-review` status gate merges next to unit tests.
-- **Every feature, not just frontend**: build a backend image from the PR when backend
-  code changes, give each review a database branch (Neon-style copy-on-write) so
-  migrations and data changes are exercised against real data safely, and point the
-  session at a per-PR preview deployment instead of a locally booted app — then the thing
-  being tested is the thing that ships.
-- **Close the loop**: on `bug_found`, spawn a follow-up session that opens a fix PR
-  against the branch, turning the reviewer into a remediator.
-- **Cheaper verdicts**: have the session POST its verdict back as its final act, keeping
-  polling only as the crash fallback ([decision 6](./DECISIONS.md#6-polling-not-callbacks)).
+Coding agents make turning ideas into code cheap, but reviewing and verifying that code is
+still expensive. This closes that gap: non-engineers and AI agents can contribute without
+drowning the team in review, and hand-written E2E suites stop being the bottleneck.
 
 ## Repo map
 
