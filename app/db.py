@@ -170,7 +170,5 @@ class Database:
             else 0,
             "total_acus": round(sum(acus), 3) if acus else None,
             "avg_cost_per_review_usd": round(sum(costs) / len(costs), 2) if costs else None,
-            "cost_per_bug_usd": round(sum(costs) / bug_count, 2)
-            if costs and bug_count
-            else None,
+            "cost_per_bug_usd": round(sum(costs) / bug_count, 2) if costs and bug_count else None,
         }

@@ -64,8 +64,7 @@ class ReviewWorker:
             bugs.append(f"### Bug {index}\n{details}")
         return (
             f"Automated E2E review found bugs in [PR #{review.pr_number}]({review.pr_url}).\n\n"
-            f"**Devin session:** {review.session_url}\n\n"
-            + "\n\n".join(bugs)
+            f"**Devin session:** {review.session_url}\n\n" + "\n\n".join(bugs)
         )
 
     async def _file_bug_issue(self, review) -> tuple[str, str | None]:

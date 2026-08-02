@@ -196,8 +196,7 @@ def test_bug_issue_is_filed_once(tmp_path):
             assert repo == "RichardHruby/superset"
             assert title == "[devin-e2e] Bug found in PR #7: UI fix"
             assert all(
-                field in body
-                for field in ("Title", "Severity", "Location", "Suggested Fix")
+                field in body for field in ("Title", "Severity", "Location", "Suggested Fix")
             )
             assert label == "devin-e2e-test"
             return "https://github.com/RichardHruby/superset/issues/8"
