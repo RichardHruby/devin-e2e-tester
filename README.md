@@ -43,7 +43,8 @@ The service acts on a `labeled` action where the added label matches
 When a hosted orchestrator is configured, open a pull request against the
 public fork [`RichardHruby/superset`](https://github.com/RichardHruby/superset)
 with `[devin-e2e]` in the body. No repository permissions are needed for this
-trigger path.
+trigger path. [`demo/REVIEWER_GUIDE.md`](demo/REVIEWER_GUIDE.md) reduces this to
+two clicks: prepared branches on the fork with ready-to-paste titles and bodies.
 
 The body marker exists because of GitHub's permission model: only users with
 triage access can add labels, so external contributors cannot use the
