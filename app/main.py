@@ -1,4 +1,3 @@
-import asyncio
 import html
 import json
 import logging as std_logging
@@ -28,10 +27,8 @@ worker = ReviewWorker(db, github, devin, settings)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    task = asyncio.create_task(worker.run())
+    worker.mark_stranded_reviews_failed()
     yield
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
     await worker.shutdown()
     await github.close()
     await devin.close()
