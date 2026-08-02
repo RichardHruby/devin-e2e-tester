@@ -127,9 +127,10 @@ whether to expand it or turn it off:
 - **Reviews run** — the denominator. Without it every other number is unreadable.
 - **Bugs caught pre-merge**, each with one-click links to the filed issue and the evidence
   comment. This is the entire value proposition, and it has to be *checkable*, not asserted.
-- **Cost per review, in dollars** — ACUs from the v3 org API × the plan's ACU rate. It shows
-  `n/a` until billing data exists, deliberately: a fake `$0.00` would be worse than a blank,
-  because someone would quote it.
+- **Cost per review, in dollars** — for Enterprise orgs, ACUs from the v3 org API × the
+  plan's ACU rate. This self-serve org reports `acus_consumed=0.0`, and the public API has
+  no per-session dollar cost, so the dashboard shows `n/a`; Usage-page measurements put a
+  full E2E review at about `$5`.
 - **Time to verdict** — the latency a PR author actually feels, and the number that decides
   whether people wait for the review or merge past it.
 

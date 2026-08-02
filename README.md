@@ -140,8 +140,9 @@ Three required, five optional:
 
 Poll interval, review timeout, and the concurrency cap are code constants in
 `app/worker.py` — nobody tunes those per deployment, so they aren't configuration. Cost
-enrichment runs only when both org variables are set; until billing data exists the
-dashboard shows `n/a` rather than a fake `$0.00`
+enrichment is wired to the Devin v3 consumption API and works for Enterprise orgs. This
+self-serve demo org reports `0` ACUs, so the dashboard shows `n/a`; manual Usage-page
+measurements put a full E2E review at about `$5`
 ([decision 7](./DECISIONS.md#7-metrics-an-em-would-use-to-decide-roll-out-vs-kill) covers
 the metric picks).
 
