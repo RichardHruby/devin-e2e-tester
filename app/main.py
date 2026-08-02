@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from .config import settings
@@ -44,6 +44,11 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Devin E2E Orchestrator", lifespan=lifespan)
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/dashboard", status_code=307)
 
 
 async def trigger_review(pr: dict) -> dict:
