@@ -28,6 +28,12 @@ devin = DevinClient(
 worker = ReviewWorker(db, github, devin, settings)
 
 
+def format_duration(seconds: float) -> str:
+    total_seconds = max(0, round(seconds))
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    return f"{minutes}:{remaining_seconds:02d}"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     worker.mark_stranded_reviews_failed()
@@ -97,7 +103,7 @@ async def dashboard():
                 if stats["avg_cost_per_review_usd"] is not None
                 else "n/a",
             ),
-            ("Avg time to verdict", f"{stats['avg_time_to_verdict_seconds'] / 60:.1f}m"),
+            ("Avg time to verdict", format_duration(stats["avg_time_to_verdict_seconds"])),
             ("Active", stats["active"]),
         ]
     )
@@ -109,7 +115,7 @@ async def dashboard():
             if review.completed_at
             else datetime.now(timezone.utc)
         )
-        duration = (finished - started).total_seconds() / 60
+        duration = (finished - started).total_seconds()
         session = (
             f'<a href="{html.escape(review.session_url)}">Open session</a>'
             if review.session_url
@@ -141,7 +147,7 @@ async def dashboard():
             f'<tr><td><a href="{html.escape(review.pr_url)}">PR #{review.pr_number}: '
             f'{html.escape(review.title)}</a></td><td><span class="badge {badge_class}">'
             f"{html.escape(review.state)}</span></td><td>{verdict}</td><td>{session}</td>"
-            f"<td>{findings}</td><td>{cost}</td><td>{duration:.1f}m</td></tr>"
+            f"<td>{findings}</td><td>{cost}</td><td>{format_duration(duration)}</td></tr>"
         )
     return f"""<!doctype html><html><head><meta http-equiv="refresh" content="15">
 <title>Devin E2E Reviews</title><style>

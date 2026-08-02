@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.db import Database
 from app.devin import DevinClient, parse_verdict
-from app.main import app
+from app.main import app, format_duration
 from app.prompt import render_prompt
 from app.worker import ReviewWorker
 
@@ -102,6 +102,56 @@ def test_persisted_review_renders_complete_prompt(tmp_path):
     assert "test it" in prompt
     assert "docker compose -f docker-compose-image-tag.yml up -d superset" in prompt
     assert "DISABLE_TS_CHECKER=true npm run dev-server" in prompt
+    assert "raw.githubusercontent.com/RichardHruby/superset/<branch>/<file>" in prompt
+
+
+def test_dashboard_duration_format():
+    assert format_duration(0) == "0:00"
+    assert format_duration(850) == "14:10"
+
+
+def test_worker_waits_for_terminal_structured_output(tmp_path, monkeypatch):
+    test_db = Database(str(tmp_path / "reviews.db"))
+    review, _ = test_db.create(payload())
+    output = {"verdict": "pass", "bugs": [], "summary": "Still testing"}
+
+    class FakeGitHub:
+        async def create_commit_status(self, *args):
+            return None
+
+        async def create_issue_comment(self, *args):
+            return None
+
+    class FakeDevin:
+        def __init__(self):
+            self.calls = 0
+
+        async def create_session(self, prompt):
+            return {"session_id": "devin-abc", "url": "https://app.devin.ai/sessions/devin-abc"}
+
+        async def get_session(self, session_id):
+            self.calls += 1
+            current = test_db.get(review.id)
+            if self.calls == 1:
+                assert current.state == "running"
+                return {"status_enum": "working", "structured_output": output}
+            assert current.state == "running"
+            assert current.summary == "Still testing"
+            return {"status_enum": "blocked", "structured_output": output}
+
+        async def get_session_usage(self, session_id):
+            return None
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr("app.worker.asyncio.sleep", no_sleep)
+    worker = ReviewWorker(test_db, FakeGitHub(), FakeDevin(), Settings())
+    asyncio.run(worker.process(review.id))
+    result = test_db.get(review.id)
+    assert result.state == "completed"
+    assert result.verdict == "pass"
+    assert result.summary == "Still testing"
 
 
 def test_terminal_review_can_be_re_run(tmp_path):
