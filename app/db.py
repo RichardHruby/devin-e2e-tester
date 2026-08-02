@@ -39,7 +39,6 @@ class Database:
             ("head_branch", "TEXT NOT NULL DEFAULT ''"),
             ("body", "TEXT NOT NULL DEFAULT ''"),
             ("repo", "TEXT NOT NULL DEFAULT ''"),
-            ("prompt_version", "INTEGER NOT NULL DEFAULT 1"),
             ("issue_url", "TEXT"),
             ("evidence_url", "TEXT"),
             ("acus_consumed", "REAL"),
@@ -74,7 +73,6 @@ class Database:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             completed_at=row["completed_at"],
-            prompt_version=row["prompt_version"],
             issue_url=row["issue_url"],
             evidence_url=row["evidence_url"],
             acus_consumed=row["acus_consumed"],
@@ -94,8 +92,8 @@ class Database:
             cursor = self.conn.execute(
                 """INSERT INTO reviews
                 (pr_number, head_sha, head_branch, body, repo, pr_url, title,
-                 state, bugs, created_at, updated_at, prompt_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', '[]', ?, ?, 1)""",
+                 state, bugs, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', '[]', ?, ?)""",
                 (
                     pr["number"],
                     head,

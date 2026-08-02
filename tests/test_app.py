@@ -1,14 +1,10 @@
 import asyncio
-import hashlib
-import hmac
-import json
 import os
 from datetime import datetime, timezone
 
 import httpx
 
 os.environ["DATABASE_PATH"] = "/tmp/devin-e2e-test.db"
-os.environ["GITHUB_WEBHOOK_SECRET"] = "secret"
 try:
     os.remove(os.environ["DATABASE_PATH"])
 except FileNotFoundError:
@@ -26,130 +22,48 @@ from app.worker import ReviewWorker
 
 def payload():
     return {
-        "action": "labeled",
-        "label": {"name": "devin-e2e-test"},
-        "pull_request": {
-            "number": 7,
-            "html_url": "https://github.com/x/y/pull/7",
-            "title": "UI fix",
-            "body": "test it",
-            "head": {"ref": "feature", "sha": "abc"},
-            "base": {"repo": {"full_name": "RichardHruby/superset"}},
-        },
+        "number": 7,
+        "html_url": "https://github.com/x/y/pull/7",
+        "title": "UI fix",
+        "body": "test it",
+        "head": {"ref": "feature", "sha": "abc"},
+        "base": {"repo": {"full_name": "RichardHruby/superset"}},
     }
 
 
-def test_signature_and_label_filter():
-    raw = json.dumps(payload()).encode()
-    signature = "sha256=" + hmac.new(b"secret", raw, hashlib.sha256).hexdigest()
-    from app import main
-
-    async def enqueue(_: int):
-        return None
-
-    main.worker.enqueue = enqueue
-    with TestClient(app) as client:
-        assert (
-            client.post(
-                "/webhook/github", content=raw, headers={"x-hub-signature-256": signature}
-            ).json()["status"]
-            == "queued"
-        )
-        ignored = payload()
-        ignored["label"]["name"] = "other"
-        ignored_raw = json.dumps(ignored).encode()
-        ignored_signature = "sha256=" + hmac.new(b"secret", ignored_raw, hashlib.sha256).hexdigest()
-        assert (
-            client.post(
-                "/webhook/github",
-                content=ignored_raw,
-                headers={"x-hub-signature-256": ignored_signature},
-            ).json()["status"]
-            == "ignored"
-        )
-        assert (
-            client.post(
-                "/webhook/github", content=raw, headers={"x-hub-signature-256": "sha256=bad"}
-            ).status_code
-            == 401
-        )
-        duplicate = client.post(
-            "/webhook/github", content=raw, headers={"x-hub-signature-256": signature}
-        ).json()
-        assert duplicate["status"] == "already_reviewing"
-
-
-def test_missing_secret_skips_validation(monkeypatch):
-    from app import main
-
-    monkeypatch.setattr(main.settings, "github_webhook_secret", "")
-
-    async def enqueue(_: int):
-        return None
-
-    main.worker.enqueue = enqueue
-    with TestClient(app) as client:
-        response = client.post("/webhook/github", json=payload())
-        assert response.status_code == 200
-
-
-def test_body_marker_triggers_opened_review(monkeypatch):
-    from app import main
-
-    marked = payload()
-    marked["action"] = "opened"
-    marked["pull_request"]["head"]["sha"] = "opened-sha"
-    marked["pull_request"]["body"] = "Please review this. [devin-e2e]"
-    monkeypatch.setattr(main.settings, "review_body_marker", "[devin-e2e]")
-
-    async def enqueue(_: int):
-        return None
-
-    main.worker.enqueue = enqueue
-    raw = json.dumps(marked).encode()
-    signature = "sha256=" + hmac.new(b"secret", raw, hashlib.sha256).hexdigest()
-    with TestClient(app) as client:
-        response = client.post(
-            "/webhook/github",
-            content=raw,
-            headers={"x-hub-signature-256": signature},
-        )
-    assert response.json()["status"] == "queued"
-
-
-def test_simulate_token_is_optional_and_protects_when_configured(monkeypatch):
+def test_reviews_token_is_optional_and_protects_when_configured(monkeypatch):
     from app import main
 
     async def enqueue(_: int):
         return None
 
     async def get_pr(_: str, number: int):
-        pr = payload()["pull_request"]
+        pr = payload()
         pr["number"] = number
-        pr["head"]["sha"] = f"simulate-{number}"
+        pr["head"]["sha"] = f"review-{number}"
         return pr
 
     monkeypatch.setattr(main.worker, "enqueue", enqueue)
     monkeypatch.setattr(main.github, "get_pr", get_pr)
-    monkeypatch.setattr(main.settings, "simulate_token", "")
+    monkeypatch.setattr(main.settings, "reviews_token", "")
     with TestClient(app) as client:
-        response = client.post("/simulate", json={"pr_number": 8})
+        response = client.post("/reviews", json={"pr_number": 8})
         assert response.status_code == 200
         assert response.json()["status"] == "queued"
 
-    monkeypatch.setattr(main.settings, "simulate_token", "test-token")
+    monkeypatch.setattr(main.settings, "reviews_token", "test-token")
     with TestClient(app) as client:
-        assert client.post("/simulate", json={"pr_number": 9}).status_code == 401
+        assert client.post("/reviews", json={"pr_number": 9}).status_code == 401
         assert (
             client.post(
-                "/simulate",
+                "/reviews",
                 json={"pr_number": 9},
                 headers={"Authorization": "Bearer wrong-token"},
             ).status_code
             == 401
         )
         response = client.post(
-            "/simulate",
+            "/reviews",
             json={"pr_number": 9},
             headers={"Authorization": "Bearer test-token"},
         )
@@ -180,7 +94,7 @@ def test_verdict_parsing():
 
 def test_persisted_review_renders_complete_prompt(tmp_path):
     test_db = Database(str(tmp_path / "reviews.db"))
-    review, created = test_db.create(payload()["pull_request"])
+    review, created = test_db.create(payload())
     assert created
     prompt = render_prompt(review)
     assert "feature" in prompt
@@ -192,10 +106,10 @@ def test_persisted_review_renders_complete_prompt(tmp_path):
 
 def test_terminal_review_can_be_re_run(tmp_path):
     test_db = Database(str(tmp_path / "reviews.db"))
-    first, created = test_db.create(payload()["pull_request"])
+    first, created = test_db.create(payload())
     assert created
     test_db.update(first.id, state="completed", verdict="pass")
-    second, created = test_db.create(payload()["pull_request"])
+    second, created = test_db.create(payload())
     assert created
     assert second.id != first.id
 
@@ -206,7 +120,7 @@ def test_stats_metrics():
     except FileNotFoundError:
         pass
     test_db = Database("/tmp/devin-stats.db")
-    review, _ = test_db.create(payload()["pull_request"])
+    review, _ = test_db.create(payload())
     test_db.update(
         review.id,
         state="completed",
@@ -241,7 +155,7 @@ def test_bug_issue_is_filed_once(tmp_path):
             return "https://github.com/RichardHruby/superset/pull/7#issuecomment-9"
 
     test_db = Database(str(tmp_path / "reviews.db"))
-    review, _ = test_db.create(payload()["pull_request"])
+    review, _ = test_db.create(payload())
     test_db.update(
         review.id,
         verdict="bug_found",
@@ -295,7 +209,7 @@ def test_cost_enrichment_persists_acus_and_cost(tmp_path):
             return 4.5
 
     test_db = Database(str(tmp_path / "reviews.db"))
-    review, _ = test_db.create(payload()["pull_request"])
+    review, _ = test_db.create(payload())
     test_db.update(review.id, session_id="devin-abc")
     worker = ReviewWorker(test_db, object(), FakeDevin(), Settings())
     asyncio.run(worker._enrich_cost(test_db.get(review.id)))

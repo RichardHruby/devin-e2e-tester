@@ -30,7 +30,6 @@ class Review:
     created_at: str
     updated_at: str
     completed_at: str | None
-    prompt_version: int
     issue_url: str | None
     evidence_url: str | None
     acus_consumed: float | None

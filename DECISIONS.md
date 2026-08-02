@@ -6,17 +6,20 @@ headings; read a section only if you care about that call. Back to the
 
 ## 1) The trigger is a GitHub Action forwarder, not a raw webhook
 
-Both paths exist. `/webhook/github` with HMAC verification is the production path and still
-works. But for this assignment the Action wins, because the trigger becomes **30 lines of
-reviewable YAML that live in the repo** instead of a URL and a secret buried in repository
-settings that nobody reviewing this can see. The Action never checks out PR code and holds
-no credentials — it POSTs a PR number.
+The Action wins because the trigger becomes **30 lines of reviewable YAML that live in the
+repo** instead of a URL and a secret buried in repository settings that nobody reviewing
+this can see. The Action never checks out PR code and holds no credentials — it POSTs a PR
+number to `POST /reviews`, which is also the local manual trigger. One entrypoint, one
+code path.
 
-The orchestrator doesn't care which one fired: both funnel into the same
-`trigger_review(pr)` path, so the trigger is swappable without touching the review logic.
+An earlier version kept a second entry path: a raw `/webhook/github` receiver with HMAC
+verification, "for production". I cut it — it was dead weight the live system never used,
+and two entry paths in a demo is one too many. In production the equivalent per-event
+delivery would be a webhook or Devin's own Automations; that's a paragraph, not code that
+has to be maintained and secured here.
 
 **Rejected:** webhook-only (invisible to a reviewer, and needs a secret exchange before
-anyone can try it).
+anyone can try it); keeping both (redundant surface — simplicity wins).
 
 ## 2) The `[devin-e2e]` body marker, instead of a label
 
@@ -90,6 +93,13 @@ the screenshots and recording attached to the PR comment, which a human can chec
 seconds. The structured output is for the machine; the evidence is for the person. There's
 also a regex fallback that scrapes a trailing JSON object out of the session messages, so a
 session that reports its verdict in chat rather than in structured output still lands.
+
+The same split decides **who does the write-back**. The session posts its own evidence
+comment — that's judgment and content, the thing agents are for. But the commit status and
+the auto-filed bug issue are done by the orchestrator in code, off the parsed verdict,
+because they're invariants: `bug_found` MUST produce a failing status and an issue, every
+time, testably. An agent "usually remembering" to set a status is not something you gate
+merges on. Prompts for judgment, code for guarantees.
 
 **Rejected:** parsing the final message with an LLM (another model call, another failure
 mode, to recover data the API can type for us); a verdict-only boolean (the bug details are

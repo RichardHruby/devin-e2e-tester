@@ -6,14 +6,19 @@ from .config import Settings
 from .db import Database
 from .devin import DevinClient, parse_verdict
 from .github import GitHubClient
-from .prompt import PROMPT_VERSION, render_prompt
+from .prompt import render_prompt
+
+POLL_INTERVAL = 60
+REVIEW_TIMEOUT_MINUTES = 90
+MAX_CONCURRENT_REVIEWS = 3
+REVIEW_LABEL = "devin-e2e-test"
 
 
 class ReviewWorker:
     def __init__(self, db: Database, github: GitHubClient, devin: DevinClient, settings: Settings):
         self.db, self.github, self.devin, self.settings = db, github, devin, settings
         self.lock = asyncio.Lock()
-        self.semaphore = asyncio.Semaphore(settings.max_concurrent_reviews)
+        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_REVIEWS)
         self.review_tasks: set[asyncio.Task] = set()
 
     async def enqueue(self, review_id: int) -> None:
@@ -69,7 +74,7 @@ class ReviewWorker:
             self.settings.superset_repo,
             f"[devin-e2e] Bug found in PR #{review.pr_number}: {review.title}",
             self._issue_body(review),
-            self.settings.review_label,
+            REVIEW_LABEL,
         )
         try:
             evidence_url = await self.github.create_issue_comment(
@@ -113,7 +118,6 @@ class ReviewWorker:
                 None,
                 "Devin E2E review is starting",
             )
-            self.db.update(review_id, prompt_version=PROMPT_VERSION)
             review = self.db.get(review_id)
             session = await self.devin.create_session(render_prompt(review))
             self.db.update(
@@ -133,7 +137,7 @@ class ReviewWorker:
             )
             started = datetime.now(timezone.utc)
             while (datetime.now(timezone.utc) - started).total_seconds() < (
-                self.settings.review_timeout_minutes * 60
+                REVIEW_TIMEOUT_MINUTES * 60
             ):
                 if self.db.get(review_id).state != "running":
                     self.db.update(review_id, state="running")
@@ -186,7 +190,7 @@ class ReviewWorker:
                         verdict=verdict.verdict,
                     )
                     return
-                await asyncio.sleep(self.settings.poll_interval)
+                await asyncio.sleep(POLL_INTERVAL)
             self.db.update(
                 review_id,
                 state="timed_out",

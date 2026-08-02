@@ -199,7 +199,11 @@ wrote something different than expected. The prepared branches are the primary
 path because they are already pushed, byte-for-byte identical for every
 reviewer, and reduce the reviewer's work to opening a compare link and pasting a
 body — while still exercising the real trigger (`pull_request_target` →
-workflow → orchestrator → Devin), not a simulated one. The `/simulate` endpoint
-remains available for anyone who wants to re-run a review against an existing PR
-without opening a new one (it requires a bearer token when `SIMULATE_TOKEN` is
-configured).
+workflow → orchestrator → Devin), not a simulated one. `POST /reviews` on the
+orchestrator remains available for anyone who wants to re-run a review against
+an existing PR without opening a new one (it requires a bearer token when
+`REVIEWS_TOKEN` is configured).
+
+That said, if you already have Devin (or another coding agent) open, the lazy
+path works too: hand it this file and ask it to open one of the PRs above — the
+titles and bodies are ready to paste, so it's a one-sentence instruction.

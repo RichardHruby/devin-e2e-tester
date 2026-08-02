@@ -1,6 +1,4 @@
 import html
-import json
-import logging as std_logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -11,7 +9,7 @@ from pydantic import BaseModel
 from .config import settings
 from .db import Database
 from .devin import DevinClient
-from .github import GitHubClient, verify_signature
+from .github import GitHubClient
 from .worker import ReviewWorker
 
 db = Database(settings.database_path)
@@ -51,38 +49,15 @@ async def trigger_review(pr: dict) -> dict:
         return {"status": status, "review_id": review.id, "state": review.state}
 
 
-@app.post("/webhook/github")
-async def github_webhook(request: Request):
-    body = await request.body()
-    if settings.github_webhook_secret:
-        if not verify_signature(
-            body, request.headers.get("x-hub-signature-256"), settings.github_webhook_secret
-        ):
-            return HTMLResponse("invalid signature", status_code=401)
-    else:
-        std_logging.getLogger("orchestrator").warning("GITHUB_WEBHOOK_SECRET is unset")
-    payload = json.loads(body)
-    labeled = (
-        payload.get("action") == "labeled"
-        and payload.get("label", {}).get("name") == settings.review_label
-    )
-    marked_open = payload.get("action") in {"opened", "reopened"} and (
-        settings.review_body_marker in (payload.get("pull_request", {}).get("body") or "")
-    )
-    if not labeled and not marked_open:
-        return {"status": "ignored"}
-    return await trigger_review(payload["pull_request"])
-
-
-class SimulateRequest(BaseModel):
+class ReviewRequest(BaseModel):
     pr_number: int
 
 
-@app.post("/simulate")
-async def simulate(request: Request, payload: SimulateRequest):
-    if settings.simulate_token:
+@app.post("/reviews")
+async def create_review(request: Request, payload: ReviewRequest):
+    if settings.reviews_token:
         authorization = request.headers.get("authorization")
-        if authorization != f"Bearer {settings.simulate_token}":
+        if authorization != f"Bearer {settings.reviews_token}":
             raise HTTPException(status_code=401, detail="Unauthorized")
     pr = await github.get_pr(settings.superset_repo, payload.pr_number)
     return await trigger_review(pr)
