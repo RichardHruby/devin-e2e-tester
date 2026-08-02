@@ -1,6 +1,4 @@
 import html
-import json
-import logging as std_logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -11,7 +9,7 @@ from pydantic import BaseModel
 from .config import settings
 from .db import Database
 from .devin import DevinClient
-from .github import GitHubClient, verify_signature
+from .github import GitHubClient
 from .worker import ReviewWorker
 
 db = Database(settings.database_path)
@@ -49,29 +47,6 @@ async def trigger_review(pr: dict) -> dict:
             else "already_reviewed"
         )
         return {"status": status, "review_id": review.id, "state": review.state}
-
-
-@app.post("/webhook/github")
-async def github_webhook(request: Request):
-    body = await request.body()
-    if settings.github_webhook_secret:
-        if not verify_signature(
-            body, request.headers.get("x-hub-signature-256"), settings.github_webhook_secret
-        ):
-            return HTMLResponse("invalid signature", status_code=401)
-    else:
-        std_logging.getLogger("orchestrator").warning("GITHUB_WEBHOOK_SECRET is unset")
-    payload = json.loads(body)
-    labeled = (
-        payload.get("action") == "labeled"
-        and payload.get("label", {}).get("name") == settings.review_label
-    )
-    marked_open = payload.get("action") in {"opened", "reopened"} and (
-        settings.review_body_marker in (payload.get("pull_request", {}).get("body") or "")
-    )
-    if not labeled and not marked_open:
-        return {"status": "ignored"}
-    return await trigger_review(payload["pull_request"])
 
 
 class SimulateRequest(BaseModel):

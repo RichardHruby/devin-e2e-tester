@@ -4,7 +4,6 @@ from string import Template
 from .models import Review
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "prompts" / "e2e_review.md"
-PROMPT_VERSION = 1
 
 
 def render_prompt(review: Review) -> str:

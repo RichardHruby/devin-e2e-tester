@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 from typing import Any
 
 import httpx
@@ -51,10 +49,3 @@ class GitHubClient:
 
     async def close(self) -> None:
         await self.client.aclose()
-
-
-def verify_signature(body: bytes, signature: str | None, secret: str) -> bool:
-    if not signature or not signature.startswith("sha256="):
-        return False
-    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
