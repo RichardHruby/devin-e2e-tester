@@ -12,24 +12,19 @@ from .prompt import PROMPT_VERSION, render_prompt
 class ReviewWorker:
     def __init__(self, db: Database, github: GitHubClient, devin: DevinClient, settings: Settings):
         self.db, self.github, self.devin, self.settings = db, github, devin, settings
-        self.queue: asyncio.Queue[int] = asyncio.Queue()
         self.lock = asyncio.Lock()
         self.semaphore = asyncio.Semaphore(settings.max_concurrent_reviews)
         self.review_tasks: set[asyncio.Task] = set()
 
     async def enqueue(self, review_id: int) -> None:
-        await self.queue.put(review_id)
+        task = asyncio.create_task(self._run_review(review_id))
+        self.review_tasks.add(task)
+        task.add_done_callback(self.review_tasks.discard)
 
-    async def run(self) -> None:
+    def mark_stranded_reviews_failed(self) -> None:
         for review in self.db.active():
             self.db.update(review.id, state="failed", summary="Orchestrator restarted")
             logging.transition(review.id, review.pr_number, "failed", reason="restart")
-        while True:
-            review_id = await self.queue.get()
-            task = asyncio.create_task(self._run_review(review_id))
-            self.review_tasks.add(task)
-            task.add_done_callback(self.review_tasks.discard)
-            self.queue.task_done()
 
     async def _run_review(self, review_id: int) -> None:
         async with self.semaphore:
