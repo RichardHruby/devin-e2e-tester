@@ -93,7 +93,7 @@ class ReviewWorker:
             return
         try:
             acus = await self.devin.get_session_usage(review.session_id)
-            if acus is not None:
+            if acus:  # 0.0 means billing data not yet available
                 self.db.update(
                     review.id,
                     acus_consumed=acus,
